@@ -7,19 +7,17 @@ namespace SoundEncoderDecoder.Modulation {
     public class NzrDemodulator : IDemodulator {
         public SampleRateType SampleRate { get; }
         public float BitDuration { get; }
-        public int DataLength { get; }
 
-        public NzrDemodulator(SampleRateType sampleRate, float bitDuration, int dataLength) {
+        public NzrDemodulator(SampleRateType sampleRate, float bitDuration) {
             SampleRate = sampleRate;
             BitDuration = bitDuration;
-            DataLength = dataLength;
         }
 
-        public BitArray ReadBits(BinaryReader br, MemoryStream ms) {
+        public BitArray ReadBits(BinaryReader br, MemoryStream ms, short averageAbsAmplitude) {
             int samplesPerBit = (int)(BitDuration * (int)SampleRate);
             short[] oneBitSamples = new short[samplesPerBit];
 
-            var bitCount = DataLength * 8;
+            var bitCount = (int)Math.Ceiling(ms.Length / 2f / samplesPerBit);
             BitArray bitArray = new BitArray(bitCount);
 
             for (int i = 0; i < bitCount; i++) {
@@ -28,15 +26,14 @@ namespace SoundEncoderDecoder.Modulation {
                     oneBitSamples[sampleId] = sample;
                 }
 
-                bitArray.Set(i, ReadBit(oneBitSamples));
+                bitArray.Set(i, ReadBit(oneBitSamples, averageAbsAmplitude));
             }
 
             return bitArray;
         }
 
-        public bool ReadBit(short[] oneBitSamples) {
+        public bool ReadBit(short[] oneBitSamples, short averageAbsAmplitude) {
             short peak = 0;
-            var half = (short)(short.MaxValue / 2f + 0.1 * short.MaxValue);
 
             for (int i = 0; i < oneBitSamples.Length; i++) {
                 var sample = oneBitSamples[i];
@@ -45,8 +42,16 @@ namespace SoundEncoderDecoder.Modulation {
                     peak = sample;
                 }
             }
+            return peak > averageAbsAmplitude;
+        }
 
-            return peak > half;
+        public NzrDemodulator OneThousandthBitDurationDemodulator() {
+            var demodulator = new NzrDemodulator(
+                sampleRate: SampleRateType._32000,
+                bitDuration: 1 / 1000f
+            );
+
+            return demodulator;
         }
     }
 }

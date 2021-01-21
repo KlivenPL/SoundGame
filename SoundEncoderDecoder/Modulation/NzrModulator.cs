@@ -44,5 +44,15 @@ namespace SoundEncoderDecoder.Modulation {
                 bw.Write(sample);
             }
         }
+
+        public NzrModulator OneThousandthBitDurationModulator() {
+            var modulator = new NzrModulator(
+                carrierFrequency: 1000,
+                sampleRate: SampleRateType._32000,
+                bitDuration: 1 / 1000f
+            );
+
+            return modulator;
+        }
     }
 }

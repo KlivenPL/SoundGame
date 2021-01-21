@@ -6,9 +6,8 @@ namespace SoundEncoderDecoder.Modulation {
     public interface IDemodulator {
         public SampleRateType SampleRate { get; }
         public float BitDuration { get; }
-        public int DataLength { get; }
 
-        bool ReadBit(short[] oneBitSamples);
-        BitArray ReadBits(BinaryReader br, MemoryStream ms);
+        bool ReadBit(short[] oneBitSamples, short averageAbsAmplitude);
+        BitArray ReadBits(BinaryReader br, MemoryStream ms, short averageAbsAmplitude);
     }
 }

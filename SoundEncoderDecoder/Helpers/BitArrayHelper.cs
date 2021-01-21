@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections;
 using System.IO;
+using System.Linq;
+using System.Text;
 
 namespace SoundEncoderDecoder.Helpers {
     public static class BitArrayHelper {
@@ -32,12 +34,6 @@ namespace SoundEncoderDecoder.Helpers {
             byte[] array = new byte[bitArray.Count / 8];
             bitArray.CopyTo(array, 0);
 
-            //byte[] result;
-
-            //using (MemoryStream ms = new MemoryStream()) {
-            //    bitArray.WriteBytesToMemStream(ms);
-            //    result = ms.ToArray();
-            //}
             return array;
         }
 
@@ -48,16 +44,43 @@ namespace SoundEncoderDecoder.Helpers {
 
             BinaryWriter bw = new BinaryWriter(ms);
             bw.Write(bitArray.ToBytes());
+        }
 
-            //StringBuilder sb = new StringBuilder(8);
+        public static bool EqualTo(this BitArray bitArray, BitArray other) {
+            if (bitArray.Count != other.Count) {
+                return false;
+            }
 
-            //for (int i = 0; i < bitArray.Count / 8; i++) {
-            //    for (int j = 0; j < 8; j++) {
-            //        sb.Append(bitArray[i] ? "1" : "0");
-            //    }
-            //    bw.Write(Convert.ToByte(sb.ToString(), 2));
-            //    sb.Clear();
-            //}
+            for (int i = 0; i < bitArray.Count; i++) {
+                if (bitArray[i] != other[i]) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        public static BitArray FromString(string str) {
+            str = str.Replace(" ", "");
+
+            if (str.Length % 8 != 0) {
+                throw new Exception("Bit array does not obey 8 bit rule");
+            }
+
+            if (str.Any(c => c != '0' && c != '1')) {
+                throw new Exception("This string does not represent valid bit array");
+            }
+
+            return new BitArray(str.Select(c => c == '1').ToArray());
+        }
+
+        public static string ToString(this BitArray bitArray) {
+            StringBuilder sb = new StringBuilder(bitArray.Length);
+            for (int i = 0; i < bitArray.Length; i++) {
+                sb.Append(bitArray[i] ? "1" : "0");
+            }
+
+            return sb.ToString();
         }
 
         public static bool Check8BitRule(this BitArray bitArray) {

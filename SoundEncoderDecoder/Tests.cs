@@ -3,29 +3,115 @@ using SoundEncoderDecoder.Modulation;
 using SoundEncoderDecoder.WavFormat;
 using System.IO;
 
+
 namespace SoundEncoderDecoder {
     class Tests {
 
         public Tests() {
-            var sampleRate = SampleRateType._44100;
-            var bytes = new byte[1024];
-            bytes[1023] = 1;
+            var sampleRate = SampleRateType._96000;
+            var bytes = new byte[1000];
 
-            var encodedText = Encoder.Encode(bytes);
+
+            for (int i = 0; i < 256; i++) {
+                bytes[i] = (byte)i;
+            }
+
+            var envelope = Encoder.Encode(bytes);
 
             var modulator = new NzrModulator(
-                carrierFrequency: 1000,
+                carrierFrequency: 9600,
                 sampleRate: sampleRate,
-                bitDuration: 1 / 1000f
+                bitDuration: 1 / 9600f
             );
 
-            var sound = WaveCreator.CreateWave(modulator, sampleRate, encodedText);
+            var sound = Wave.Compose(modulator, sampleRate, envelope.ToBitArray());
 
             using (FileStream fs = new FileStream("noise.wav", FileMode.Create)) {
                 BinaryWriter bw = new BinaryWriter(fs);
                 bw.Write(sound.ToBytes());
             }
+
+            //var sound = new WavFile(new FileInfo("noise.wav"));
+
+            var demodulator = new NzrDemodulator(
+                sampleRate: SampleRateType._96000,
+                bitDuration: 1 / 9600f
+            );
+
+            var bitArray = Wave.Decompose(demodulator, sound);
+
+            var decodedEnvelope = Encoder.Decode(bitArray);
+
         }
+
+        /*public bool FindEnclosingSequence(BitArray sequence, WavFile wavFile, BinaryReader br, MemoryStream ms, ref SignalData signalData) {
+
+            int sequenceZeros = 0;
+            int sequenceOnes = 0;
+
+            for (int i = 0; i < sequence.Count; i++) {
+                if (sequence[i]) {
+                    sequenceOnes++;
+                } else {
+                    sequenceZeros++;
+                }
+            }
+
+            // znajdujemy pierwszy peak
+
+            short peakValue = -1;
+            int peakSampleId = -1;
+
+            List<(short, int)> peaks = new List<(short, int)>();
+
+            float a = 0, b = 0;
+            BitArray ba = new BitArray(1);
+
+            for (int i = 0; i < wavFile.Samples; i++) {
+                var sample = (short)Math.Abs((int)br.ReadInt16());
+                if (sample > signalData.AverageAbsAmplitude) {
+                    if (sample > peakValue) {
+                        peakValue = sample;
+                        peakSampleId = i;
+                    }
+                } else {
+                    if (peakValue != -1) {
+                        peaks.Add((peakValue, peakSampleId));
+                        peakValue = -1;
+                        peakSampleId = -1;
+                    }
+                }
+
+                if (peaks.Count == 2) {
+                    //var peakFreq = 2f / ((peaks[1].Item2 - peaks[1].Item2) / (float)wavFile.SampleRate);
+                    // if (Math.Abs(peakFreq - wavFile.))
+                    var peakDistance = peaks[1].Item2 - peaks[0].Item2;
+                    b = (peaks[0].Item1 + peaks[1].Item1) / 2f;
+                    var peakHeightRise = b - signalData.AverageAbsAmplitude;
+                    a = peakHeightRise / peakDistance; // slope
+
+                    break;
+
+                }
+            }
+
+            float detector = b;
+            List<bool> bits = new List<bool>();
+
+            while (ms.Position < ms.Length) {
+                var sample2 = (short)Math.Abs((int)br.ReadInt16());
+
+                if (sample2 > signalData.AverageAbsAmplitude) {
+                    detector = b;
+                } else {
+                    detector -= a;
+                }
+
+                bits.Add(detector > signalData.AverageAbsAmplitude);
+            }
+            ba = new BitArray(bits.ToArray());
+            return true;
+        }*/
 
         //    const float cNote = 261.6256f;
         //    const float dNote = 293.6648f;
