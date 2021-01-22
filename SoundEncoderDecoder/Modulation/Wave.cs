@@ -32,7 +32,7 @@ namespace SoundEncoderDecoder.Modulation {
                 var dataSegment = FindDataSegment(demodulator, wavFile, br, ms, averageAbsAmplitude);
 
                 if (dataSegment != null) {
-                    return ReadBits(demodulator, averageAbsAmplitude, dataSegment);
+                    return ReadBits(demodulator, 1, 1, dataSegment); // todo poprawic
                 }
             }
 
@@ -54,7 +54,7 @@ namespace SoundEncoderDecoder.Modulation {
                 }
             }
 
-            return (short)((peak + low) / 2f);
+            return (short)((peak + low) / 2.0);
         }
 
         private static byte[] FindDataSegment(IDemodulator demodulator, WavFile wavFile, BinaryReader br, MemoryStream ms, short averageAbsAmplitude) {
@@ -72,21 +72,58 @@ namespace SoundEncoderDecoder.Modulation {
                     }
                 } else {
                     if (peakValue != -1) {
-
+                        /*                        for (int k = -10; k < 10; k++) {
+                                                    if (peakPosition < 10)
+                                                        k += peakPosition;*/
                         // checking if header exists
-                        var peakPositionInWavFileBytes = peakPosition * wavFile.BytesPerSample;
+                        var peakPositionInWavFileBytes = (peakPosition /*+ k*/) * wavFile.BytesPerSample;
                         var headerBytes = wavFile.Data.Skip(peakPositionInWavFileBytes).Take(headerLengthInWavFileBytes).ToArray();
 
-                        BitArray headerBa = ReadBits(demodulator, averageAbsAmplitude, headerBytes);
+
+                        var bitLengthInWavFileBytes = CalculateLengthInWavFileBytes(1, demodulator.BitDuration, wavFile);
+                        double onesAverageDbl = 0, zerosAverageDbl = 0;
+                        for (int j = 0; j < Envelope.EnclosingSequence.Length; j++) {
+                            var bytes = headerBytes.Skip(j * bitLengthInWavFileBytes).Take(bitLengthInWavFileBytes).ToArray();
+                            // var shorts = bytes.Select(b => Math.Abs(b)).ToArray();
+
+                            short[] shorts = new short[(int)Math.Ceiling(bytes.Length / 2.0)];
+                            Buffer.BlockCopy(bytes, 0, shorts, 0, bytes.Length);
+
+                            for (int l = 0; l < shorts.Length; l++) {
+                                shorts[l] = (short)Math.Abs((int)shorts[l]);
+                            }
+
+                            var headerShortAverage = (short)shorts.Average(e => e);
+                            if (Envelope.EnclosingSequence[j])
+                                onesAverageDbl += headerShortAverage;
+                            else
+                                zerosAverageDbl += headerShortAverage;
+                        }
+
+                        onesAverageDbl = (short)Math.Round((double)onesAverageDbl / Envelope.EnclosingSequence.ToBitString().Count(c => c == '1'));
+                        zerosAverageDbl = (short)Math.Round((double)zerosAverageDbl / Envelope.EnclosingSequence.ToBitString().Count(c => c == '0'));
+
+                        if (onesAverageDbl < zerosAverageDbl)
+                            continue;
+
+                        short onesAverage = (short)onesAverageDbl;
+                        short zerosAverage = (short)zerosAverageDbl;
+
+                        BitArray headerBa = ReadBits(demodulator, zerosAverage, onesAverage, headerBytes);
+
+                        Console.WriteLine(Envelope.EnclosingSequence.ToBitString());
+                        Console.WriteLine(headerBa.ToBitString());
+                        Console.WriteLine();
 
                         if (headerBa.EqualTo(Envelope.EnclosingSequence)) {
+
                             // getting real data length (with envelope data)
 
                             var headerSkip = peakPositionInWavFileBytes + headerLengthInWavFileBytes;
                             var intSizeInWavFileBytes = CalculateLengthInWavFileBytes(sizeof(int) * 8, demodulator.BitDuration, wavFile);
                             var dataLengthBytes = wavFile.Data.Skip(headerSkip).Take(intSizeInWavFileBytes).ToArray();
 
-                            BitArray dataLengthBa = ReadBits(demodulator, averageAbsAmplitude, dataLengthBytes);
+                            BitArray dataLengthBa = ReadBits(demodulator, zerosAverage, onesAverage, dataLengthBytes);
 
                             var dataLengthInBytes = BitConverter.ToInt32(dataLengthBa.ToBytes());
                             var dataLengthInWavFileBytes = CalculateLengthInWavFileBytes(dataLengthInBytes * 8, demodulator.BitDuration, wavFile);
@@ -96,7 +133,7 @@ namespace SoundEncoderDecoder.Modulation {
                             var headerAndDataSkip = headerSkip + intSizeInWavFileBytes + dataLengthInWavFileBytes;
                             var enclosingHeaderBytes = wavFile.Data.Skip(headerAndDataSkip).Take(headerLengthInWavFileBytes).ToArray();
 
-                            BitArray enclosingHeaderBa = ReadBits(demodulator, averageAbsAmplitude, enclosingHeaderBytes);
+                            BitArray enclosingHeaderBa = ReadBits(demodulator, zerosAverage, onesAverage, enclosingHeaderBytes);
 
                             if (enclosingHeaderBa.EqualTo(Envelope.EnclosingSequence)) {
                                 var headerAndIntSkip = headerSkip + intSizeInWavFileBytes;
@@ -105,7 +142,7 @@ namespace SoundEncoderDecoder.Modulation {
                                 return dataBytes;
                             }
                         }
-
+                        // }
                         peakValue = -1;
                         peakPosition = -1;
                     }
@@ -114,17 +151,17 @@ namespace SoundEncoderDecoder.Modulation {
             return null;
         }
 
-        private static int CalculateLengthInWavFileBytes(int bitsCount, float bitDuration, WavFile file) {
+        private static int CalculateLengthInWavFileBytes(int bitsCount, double bitDuration, WavFile file) {
             var length = bitsCount * bitDuration * file.SampleRate * file.BytesPerSample;
             return (int)Math.Ceiling(length);
         }
 
-        private static BitArray ReadBits(IDemodulator demodulator, short averageAbsAmplitude, byte[] fileBytes) {
+        private static BitArray ReadBits(IDemodulator demodulator, short zerosAverage, short onesAverage, byte[] fileBytes) {
             BitArray headerBa = null;
 
             using (MemoryStream ms = new MemoryStream(fileBytes)) {
                 BinaryReader headerBr = new BinaryReader(ms);
-                headerBa = demodulator.ReadBits(headerBr, ms, averageAbsAmplitude);
+                headerBa = demodulator.ReadBits(headerBr, ms, zerosAverage, onesAverage);
             }
 
             return headerBa;

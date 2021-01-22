@@ -74,7 +74,7 @@ namespace SoundEncoderDecoder.Helpers {
             return new BitArray(str.Select(c => c == '1').ToArray());
         }
 
-        public static string ToString(this BitArray bitArray) {
+        public static string ToBitString(this BitArray bitArray) {
             StringBuilder sb = new StringBuilder(bitArray.Length);
             for (int i = 0; i < bitArray.Length; i++) {
                 sb.Append(bitArray[i] ? "1" : "0");
