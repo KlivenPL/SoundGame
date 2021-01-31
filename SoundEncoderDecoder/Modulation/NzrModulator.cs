@@ -15,41 +15,60 @@ namespace SoundEncoderDecoder.Modulation {
         }
 
         public void WriteZero(MemoryStream ms) {
-            WriteSound(GetZeroSample, BitDuration, (int)SampleRate, ms);
+            WriteSound(GetZeroSample, ms);
         }
 
         public void WriteOne(MemoryStream ms) {
-            WriteSound(GetOneSample, BitDuration, (int)SampleRate, ms);
+            WriteSound(GetOneSample, ms);
         }
 
-        private short GenerateWaveSample(double t) {
-            var wave = (short)(short.MaxValue * Math.Sin(2 * Math.PI * CarrierFrequency * t));
+        private short GenerateWaveSample(double frequency, double t) {
+            var wave = (short)(short.MaxValue * Math.Sin(2 * Math.PI * frequency * t));
             return wave;
         }
 
+        /*        private short GetZeroSample(double t) {
+                    return 0;
+                }
+
+                private short GetOneSample(double t) {
+                    return GenerateWaveSample(CarrierFrequency, t);
+                }*/
+
         private short GetZeroSample(double t) {
-            return 0;
+            return GenerateWaveSample(-CarrierFrequency, t);
         }
 
         private short GetOneSample(double t) {
-            return GenerateWaveSample(t);
+            return GenerateWaveSample(CarrierFrequency, t);
         }
 
-        private void WriteSound(Func<double, short> soundFunc, double duration, int sampleRate, MemoryStream ms) {
-            var totalSamples = duration * sampleRate;
+
+        private void WriteSound(Func<double, short> soundFunc, MemoryStream ms) {
+            var totalSamples = (int)(BitDuration * (int)SampleRate);
             BinaryWriter bw = new BinaryWriter(ms);
 
             for (int sampleId = 0; sampleId < totalSamples; sampleId++) {
-                short sample = soundFunc(sampleId / totalSamples * duration);
+                short sample = soundFunc(ms.Position / 2.0 / (double)SampleRate);
                 bw.Write(sample);
             }
+        }
+
+        public static NzrModulator Get_1_1000_BitDurationModulatorFREQ() {
+            var modulator = new NzrModulator(
+                carrierFrequency: 800,
+                sampleRate: SampleRateType._8000,
+                bitDuration: 1.0 / 8
+            );
+
+            return modulator;
         }
 
         public static NzrModulator Get_1_1000_BitDurationModulator() {
             var modulator = new NzrModulator(
                 carrierFrequency: 1000,
                 sampleRate: SampleRateType._32000,
-                bitDuration: 1.0 / 1000
+                bitDuration: 1.0 / 4000
             );
 
             return modulator;
@@ -70,6 +89,26 @@ namespace SoundEncoderDecoder.Modulation {
                 carrierFrequency: 6400,
                 sampleRate: SampleRateType._32000,
                 bitDuration: 1.0 / 6400
+            );
+
+            return modulator;
+        }
+
+        public static NzrModulator Get_1_4410_BitDurationModulator() {
+            var modulator = new NzrModulator(
+                carrierFrequency: 3150,
+                sampleRate: SampleRateType._44100,
+                bitDuration: 1.0 / 3150//4900
+            );
+
+            return modulator;
+        }
+
+        public static NzrModulator Get_1_2205_BitDurationModulator() {
+            var modulator = new NzrModulator(
+                carrierFrequency: 1000,
+                sampleRate: SampleRateType._44100,
+                bitDuration: 1.0 / 2205
             );
 
             return modulator;

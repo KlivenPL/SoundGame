@@ -8,12 +8,12 @@ namespace SoundEncoderDecoder.Helpers {
     public static class BitArrayHelper {
 
         public static BitArray MergeWith(this BitArray bitArray, BitArray otherBitArray) {
-            if (!bitArray.Check8BitRule()) {
-                throw new Exception("Bit array does not obey 8 bit rule");
+            if (!bitArray.Check16BitRule()) {
+                throw new Exception("Bit array does not obey 16 bit rule");
             }
 
-            if (!otherBitArray.Check8BitRule()) {
-                throw new Exception("Other bit array does not obey 8 bit rule");
+            if (!otherBitArray.Check16BitRule()) {
+                throw new Exception("Other bit array does not obey 16 bit rule");
             }
 
             byte[] mergedBytes;
@@ -27,8 +27,8 @@ namespace SoundEncoderDecoder.Helpers {
         }
 
         public static byte[] ToBytes(this BitArray bitArray) {
-            if (!bitArray.Check8BitRule()) {
-                throw new Exception("Bit array does not obey 8 bit rule");
+            if (!bitArray.Check16BitRule()) {
+                throw new Exception("Bit array does not obey 16 bit rule");
             }
 
             byte[] array = new byte[bitArray.Count / 8];
@@ -38,8 +38,8 @@ namespace SoundEncoderDecoder.Helpers {
         }
 
         public static void WriteBytesToMemStream(this BitArray bitArray, MemoryStream ms) {
-            if (!bitArray.Check8BitRule()) {
-                throw new Exception("Bit array does not obey 8 bit rule");
+            if (!bitArray.Check16BitRule()) {
+                throw new Exception("Bit array does not obey 16 bit rule");
             }
 
             BinaryWriter bw = new BinaryWriter(ms);
@@ -63,8 +63,8 @@ namespace SoundEncoderDecoder.Helpers {
         public static BitArray FromString(string str) {
             str = str.Replace(" ", "");
 
-            if (str.Length % 8 != 0) {
-                throw new Exception("Bit array does not obey 8 bit rule");
+            if (str.Length % 16 != 0) {
+                throw new Exception("Bit array does not obey 16 bit rule");
             }
 
             if (str.Any(c => c != '0' && c != '1')) {
@@ -75,6 +75,8 @@ namespace SoundEncoderDecoder.Helpers {
         }
 
         public static string ToBitString(this BitArray bitArray) {
+            if (bitArray == null)
+                return null;
             StringBuilder sb = new StringBuilder(bitArray.Length);
             for (int i = 0; i < bitArray.Length; i++) {
                 sb.Append(bitArray[i] ? "1" : "0");
@@ -83,8 +85,37 @@ namespace SoundEncoderDecoder.Helpers {
             return sb.ToString();
         }
 
-        public static bool Check8BitRule(this BitArray bitArray) {
-            return bitArray.Length % 8 == 0;
+        public static bool Check16BitRule(this BitArray bitArray) {
+            if (bitArray == null)
+                return false;
+            return bitArray.Length % 16 == 0;
+        }
+
+        public static double CompareTo(this BitArray bitArray, BitArray other) {
+            if (bitArray == null || other == null)
+                return 0;
+
+            if (bitArray.Count != other.Count) {
+                return 0;
+            }
+
+            int sameBits = 0;
+
+            for (int i = 0; i < bitArray.Count; i++) {
+                if (bitArray[i] == other[i]) {
+                    sameBits++;
+                }
+            }
+
+            return (double)sameBits / bitArray.Length;
+        }
+
+        public static BitArray Skip(this BitArray bitArray, int skip) {
+            return FromString(bitArray.ToBitString().Substring(skip));
+        }
+
+        public static BitArray SkipLast(this BitArray bitArray, int skip) {
+            return FromString(bitArray.ToBitString().Substring(0, bitArray.Count - skip));
         }
     }
 }

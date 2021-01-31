@@ -5,7 +5,7 @@ using System.Linq;
 
 namespace SoundEncoderDecoder.Encoding {
     public class Envelope {
-        public static BitArray EnclosingSequence => BitArrayHelper.FromString("10101010 10101010 10101010 10101010");
+        public static BitArray EnclosingSequence => BitArrayHelper.FromString("1111111100110011 0101010101010101 1111111100110011 0101010101010101 1010101010101010 1111000011111111");
         public byte[] Data { get; }
         public int DataLength => Data.Length;
         public DataType DataType => (DataType)Data.Last();
