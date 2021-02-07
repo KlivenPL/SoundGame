@@ -9,6 +9,7 @@ namespace SoundEncoderDecoder.Encoding {
         public byte[] Data { get; }
         public int DataLength => Data.Length;
         public DataType DataType => (DataType)Data.Last();
+        public const int PacketSize = 528;
 
         /// <summary>
         /// Use only to decompose already encoded envelope
@@ -23,12 +24,29 @@ namespace SoundEncoderDecoder.Encoding {
         }
 
         public BitArray ToBitArray() {
-            var bitArray = EnclosingSequence
-                .MergeWith(new BitArray(BitConverter.GetBytes(DataLength)))
-                .MergeWith(new BitArray(Data))
-                .MergeWith(EnclosingSequence);
+            var bitArray = new BitArray(GetPacketedData());
 
             return bitArray;
+        }
+
+        private byte[] GetPacketedData() {
+            byte[] data = null;
+            for (int i = 0; i < DataLength; i += PacketSize) {
+                if (data == null) {
+                    data = EnclosingSequence.ToBytes();
+                } else {
+                    data = data.Concat(EnclosingSequence.ToBytes()).ToArray();
+                }
+
+                int take = PacketSize;
+                if (take + i > DataLength)
+                    take = DataLength - i;
+
+                data = data.Concat(BitConverter.GetBytes(take)).ToArray();
+                data = data.Concat(Data.DeepCopy(i, take)).ToArray();
+            }
+            data = data.Concat(EnclosingSequence.ToBytes()).ToArray();
+            return data;
         }
     }
 }

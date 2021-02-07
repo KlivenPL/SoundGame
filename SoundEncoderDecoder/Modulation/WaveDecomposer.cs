@@ -2,6 +2,7 @@
 using SoundEncoderDecoder.Helpers;
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace SoundEncoderDecoder.Modulation {
@@ -14,91 +15,94 @@ namespace SoundEncoderDecoder.Modulation {
             Demodulator = demodulator;
         }
 
-        public short[] FindDataSegments(short[] samples, out double zerosRMS, out double onesRMS, out int bytesToRead) {
+        public IEnumerable<DataSegment> FindDataSegments(short[] samples) {
+            List<DataSegment> dataSegments = new List<DataSegment>();
             var headerLengthInSamples = Wave.CalculateLengthInSamples(Envelope.EnclosingSequence.Length - 16, BitDuration, SampleRate);
             var headerSequence = Envelope.EnclosingSequence.Skip(16);
             var footerSequence = Envelope.EnclosingSequence.SkipLast(16);
-            //var sineOffset = (int)((double)SampleRate / (4.0 * demodulator.CarrierFrequency));
 
             for (int i = 0; i < samples.Length; i++) {
-                var sample = samples[i];
-                if (sample < 0)
-                    continue;
-
-                /* try {*/
                 var samplePosition = i;
-                var headerSamples = samples.DeepCopy(samplePosition, headerLengthInSamples);
 
-                (onesRMS, zerosRMS) = CalculateRMSes(headerSequence, headerSamples);
+                if (CheckIfHeaderFound(samples, headerLengthInSamples, headerSequence, samplePosition, out double onesTestValue, out double zerosTestValue)) {
 
-                // if (onesRMS < zerosRMS)
-                //    continue;
+                    var dataLengthInBytes = GetDataLength(samples, headerLengthInSamples, samplePosition, onesTestValue, zerosTestValue, out int headerSkip, out int intSizeInSamples);
 
-                BitArray headerBa = Demodulator.ReadBits(headerSamples, zerosRMS, onesRMS, headerSequence.Count / 8);
-
-                Console.WriteLine(headerSequence.ToBitString());
-                Console.WriteLine(headerBa.ToBitString());
-                Console.WriteLine(headerBa.CompareTo(headerSequence));
-                Console.WriteLine();
-
-                var compareToHeader = headerBa?.CompareTo(headerSequence);
-                if (compareToHeader >= 0.9) {
-
-
-                    // getting real data length (with envelope data)
-
-                    var headerSkip = samplePosition + headerLengthInSamples;
-                    var intSizeInSamples = Wave.CalculateLengthInSamples(sizeof(int) * 8, BitDuration, SampleRate);
-                    var dataLengthSamples = samples.DeepCopy(headerSkip, intSizeInSamples);
-
-                    BitArray dataLengthBa = Demodulator.ReadBits(dataLengthSamples, zerosRMS, onesRMS, sizeof(int));
-
-                    var dataLengthInBytes = BitConverter.ToInt32(dataLengthBa.ToBytes());
-
-                    if (dataLengthInBytes < 0)
+                    if (dataLengthInBytes == null)
                         continue;
 
-                    var dataLengthInSamples = Wave.CalculateLengthInSamples(dataLengthInBytes * 8, BitDuration, SampleRate);
+                    var dataLengthInSamples = Wave.CalculateLengthInSamples(dataLengthInBytes.Value * 8, BitDuration, SampleRate);
 
-                    // checking if enclosing header exists
-
-                    var headerAndDataSkip = headerSkip + intSizeInSamples + dataLengthInSamples;
-                    var enclosingHeaderSamples = samples.DeepCopy(headerAndDataSkip, headerLengthInSamples);
-                    BitArray enclosingHeaderBa = null;
-                    if (enclosingHeaderSamples != null) {
-                        enclosingHeaderBa = Demodulator.ReadBits(enclosingHeaderSamples, zerosRMS, onesRMS, footerSequence.Count / 8);
-                    }
-
-                    var compareToFooter = enclosingHeaderBa?.CompareTo(footerSequence);
-                    if (compareToFooter >= 0.9) {
-                        (double onesRMS2, double zerosRMS2) = CalculateRMSes(footerSequence, enclosingHeaderSamples);
-
-                        onesRMS = (onesRMS + onesRMS2) / 2.0;
-                        zerosRMS = (zerosRMS + zerosRMS2) / 2.0;
+                    if (CheckIfFooterFound(samples, headerLengthInSamples, footerSequence, onesTestValue, zerosTestValue, headerSkip, intSizeInSamples, dataLengthInSamples, out short[] enclosingHeaderSamples)) {
 
                         var headerAndIntSkip = headerSkip + intSizeInSamples;
-                        var dataBytes = samples.DeepCopy(headerAndIntSkip, dataLengthInSamples);
+                        var dataSamples = samples.DeepCopy(headerAndIntSkip, dataLengthInSamples);
 
-                        bytesToRead = dataLengthInBytes;
-                        return dataBytes;
+                        dataSegments.Add(new DataSegment {
+                            DataSamples = dataSamples,
+                            OnesValue = onesTestValue,
+                            ZerosValue = zerosTestValue,
+                            BytesToRead = dataLengthInBytes.Value
+                        });
+
+                        i = headerAndIntSkip + dataLengthInSamples;
                     }
                 }
-                /*} catch {
-
-                }*/
             }
-            bytesToRead = 0;
-            zerosRMS = 0;
-            onesRMS = 0;
-            return null;
+            return dataSegments;
         }
 
-        private (double onesRMS, double zerosRMS) CalculateRMSes(BitArray header, short[] headerSamples) {
+        private bool CheckIfFooterFound(short[] samples, int headerLengthInSamples, BitArray footerSequence, double onesTestValue, double zerosTestValue, int headerSkip, int intSizeInSamples, int dataLengthInSamples, out short[] enclosingHeaderSamples) {
+            var headerAndDataSkip = headerSkip + intSizeInSamples + dataLengthInSamples;
+            enclosingHeaderSamples = samples.DeepCopy(headerAndDataSkip, headerLengthInSamples);
+            BitArray enclosingHeaderBa = null;
+
+            if (enclosingHeaderSamples != null) {
+                enclosingHeaderBa = Demodulator.ReadBits(enclosingHeaderSamples, zerosTestValue, onesTestValue, footerSequence.Count / 8);
+            }
+
+            var compareToFooter = enclosingHeaderBa?.EqualTo(footerSequence);
+            return compareToFooter == true;
+        }
+
+        private int? GetDataLength(short[] samples, int headerLengthInSamples, int samplePosition, double onesTestValue, double zerosTestValue, out int headerSkip, out int intSizeInSamples) {
+            headerSkip = samplePosition + headerLengthInSamples;
+            intSizeInSamples = Wave.CalculateLengthInSamples(sizeof(int) * 8, BitDuration, SampleRate);
+            var dataLengthSamples = samples.DeepCopy(headerSkip, intSizeInSamples);
+
+            BitArray dataLengthBa = Demodulator.ReadBits(dataLengthSamples, zerosTestValue, onesTestValue, sizeof(int));
+
+            if (dataLengthBa == null)
+                return null;
+
+            var dataLengthInBytes = BitConverter.ToInt32(dataLengthBa.ToBytes());
+            return dataLengthInBytes;
+        }
+
+        private bool CheckIfHeaderFound(short[] samples, int headerLengthInSamples, BitArray headerSequence, int samplePosition, out double onesTestValue, out double zerosTestValue) {
+            var headerSamples = samples.DeepCopy(samplePosition, headerLengthInSamples);
+
+            (onesTestValue, zerosTestValue) = CalculateRMSes(headerSequence, headerSamples);
+
+            BitArray headerBa = Demodulator.ReadBits(headerSamples, zerosTestValue, onesTestValue, headerSequence.Count / 8);
+            var compareToHeader = headerBa?.EqualTo(headerSequence);
+
+            if (compareToHeader == true) {
+                /*                Console.WriteLine(headerSequence.ToBitString());
+                                Console.WriteLine(headerBa.ToBitString());
+                                Console.WriteLine(headerBa.CompareTo(headerSequence));
+                                Console.WriteLine();*/
+            }
+
+            return compareToHeader == true;
+        }
+
+        private (double onesTestValue, double zerosTestValues) CalculateRMSes(BitArray header, short[] headerSamples) {
             var headerOnesCount = header.ToBitString().Count(c => c == '1');
             var headerZerosCount = header.ToBitString().Count(c => c == '0');
 
             var bitLengthInSamples = Wave.CalculateLengthInSamples(1, BitDuration, SampleRate);
-            double onesRMS = 0, zerosRMS = 0;
+            double onesTestValue = 0, zerosTestValues = 0;
 
             for (int j = 0; j < header.Length; j++) {
                 var headerBitSamples = headerSamples.DeepCopy(j * bitLengthInSamples, bitLengthInSamples);
@@ -106,22 +110,18 @@ namespace SoundEncoderDecoder.Modulation {
                 if (headerBitSamples == null)
                     continue;
 
-                // getting only middle samples
-                var skip = (int)(headerBitSamples.Length / 4.0);
-                headerBitSamples = headerBitSamples.DeepCopy(/*skip, headerBitSamples.Length - skip*/);
-
-                var headerBitRMS = Wave.RMS(headerBitSamples, header[j]);
+                var headerBitTestValue = Demodulator.GetTestValue(headerBitSamples, header[j]);
 
                 if (header[j])
-                    onesRMS += headerBitRMS;
+                    onesTestValue += headerBitTestValue;
                 else
-                    zerosRMS += headerBitRMS;
+                    zerosTestValues += headerBitTestValue;
             }
 
-            onesRMS = onesRMS / headerOnesCount;
-            zerosRMS = zerosRMS / headerZerosCount;
+            onesTestValue /= headerOnesCount;
+            zerosTestValues /= headerZerosCount;
 
-            return (onesRMS, zerosRMS);
+            return (onesTestValue, zerosTestValues);
         }
     }
 }

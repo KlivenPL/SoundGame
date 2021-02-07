@@ -6,8 +6,8 @@ namespace SoundEncoderDecoder.Modulation {
         public SampleRateType SampleRate { get; }
         public double CarrierFrequency { get; }
         public double BitDuration { get; }
-
-        bool ReadBit(short[] oneBitSamples, double zerosAverage, double onesAverage);
-        BitArray ReadBits(short[] samples, double zerosRMS, double onesRMS, int bitsToRead);
+        double GetTestValue(short[] arr, bool forOne);
+        bool ReadBit(short[] oneBitSamples, double zerosTestValue, double onesTestValue);
+        BitArray ReadBits(short[] samples, double zerosTestValue, double onesTestValue, int bitsToRead);
     }
 }
